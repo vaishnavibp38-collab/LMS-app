@@ -2,6 +2,10 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET is not defined in environment variables. Authentication will fail.');
+}
+
 const authRoutes = require('./routes/authRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const lessonRoutes = require('./routes/lessonRoutes');

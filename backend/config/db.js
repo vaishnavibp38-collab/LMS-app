@@ -18,15 +18,27 @@ const db = new sqlite3.Database(dbPath, (err) => {
       try {
         console.log('Production: Initializing schema in /tmp/lms.db...');
         const schemaPath = path.resolve(__dirname, '../schema.sql');
+        console.log('Looking for schema at:', schemaPath);
+        
+        if (!fs.existsSync(schemaPath)) {
+          console.error('CRITICAL: schema.sql NOT FOUND at', schemaPath);
+          return;
+        }
+
         const schema = fs.readFileSync(schemaPath, 'utf8');
         const statements = schema.split(';').filter(s => s.trim() !== '');
 
         db.serialize(() => {
           for (let statement of statements) {
-            db.run(statement);
+            const trimmed = statement.trim();
+            if (trimmed) {
+              db.run(trimmed, (err) => {
+                if (err) console.error('Error executing statement:', trimmed.substring(0, 50), '...', err.message);
+              });
+            }
           }
         });
-        console.log('Production: Schema initialized successfully.');
+        console.log('Production: Schema initialization commands sent to database.');
       } catch (error) {
         console.error('Failed to initialize schema:', error);
       }
