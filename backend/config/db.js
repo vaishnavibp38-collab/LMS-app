@@ -12,42 +12,62 @@ const db = new sqlite3.Database(dbPath, (err) => {
   } else {
     console.log('Connected to SQLite database at:', dbPath);
     db.run('PRAGMA foreign_keys = ON');
+  }
+});
 
-    // On Vercel, the /tmp directory is empty on boot. We MUST initialize the tables.
-    if (isProd) {
-      try {
-        console.log('Production: Initializing schema in /tmp/lms.db...');
-        const schemaPath = path.join(process.cwd(), 'backend', 'schema.sql');
-        console.log('Looking for schema at:', schemaPath);
-        
-        if (!fs.existsSync(schemaPath)) {
-          console.error('CRITICAL: schema.sql NOT FOUND at', schemaPath);
-          return;
-        }
+// Robust initialization promise
+const initPromise = new Promise((resolve, reject) => {
+  if (!isProd) {
+    return resolve();
+  }
 
-        const schema = fs.readFileSync(schemaPath, 'utf8');
-        const statements = schema.split(';').filter(s => s.trim() !== '');
-
-        db.serialize(() => {
-          for (let statement of statements) {
-            const trimmed = statement.trim();
-            if (trimmed) {
-              db.run(trimmed, (err) => {
-                if (err) console.error('Error executing statement:', trimmed.substring(0, 50), '...', err.message);
-              });
-            }
-          }
-        });
-        console.log('Production: Schema initialization commands sent to database.');
-      } catch (error) {
-        console.error('Failed to initialize schema:', error);
-      }
+  try {
+    console.log('Production: Initializing schema in /tmp/lms.db...');
+    const schemaPath = path.resolve(__dirname, '../schema.sql');
+    console.log('Looking for schema at:', schemaPath);
+    
+    if (!fs.existsSync(schemaPath)) {
+      console.error('CRITICAL: schema.sql NOT FOUND at', schemaPath);
+      return resolve(); // Resolve anyway to prevent hanging, but log the error
     }
+
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+    const statements = schema.split(';').filter(s => s.trim() !== '');
+
+    db.serialize(() => {
+      let completed = 0;
+      let total = statements.length;
+
+      if (total === 0) return resolve();
+
+      for (let statement of statements) {
+        const trimmed = statement.trim();
+        if (trimmed) {
+          db.run(trimmed, (err) => {
+            completed++;
+            if (err) {
+              console.error('Schema Error:', err.message);
+            }
+            if (completed === total) {
+              console.log('Production: Schema initialization complete.');
+              resolve();
+            }
+          });
+        } else {
+          completed++;
+          if (completed === total) resolve();
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Initialization Exception:', error);
+    resolve();
   }
 });
 
 module.exports = {
-  query: (text, params = []) => {
+  query: async (text, params = []) => {
+    await initPromise; // Wait for schema to be ready
     return new Promise((resolve, reject) => {
       const isSelect = text.trim().toLowerCase().startsWith('select');
       if (isSelect) {
