@@ -17,7 +17,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     if (isProd) {
       try {
         console.log('Production: Initializing schema in /tmp/lms.db...');
-        const schemaPath = path.resolve(__dirname, '../schema.sql');
+        const schemaPath = path.join(process.cwd(), 'backend', 'schema.sql');
         console.log('Looking for schema at:', schemaPath);
         
         if (!fs.existsSync(schemaPath)) {
